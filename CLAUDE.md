@@ -45,7 +45,15 @@ Shared by `app.py` and `train.py`. Turns a raw scan into a feature vector:
 - optional **ratios vector** (`create_ratios_vector`): all pairwise LED ratios flattened — an alternate feature representation
 - optional **min/max normalization** against reference values
 
-Calibration is fundamental, not optional: every dataset directory ships calibration CSVs, and a scan is only meaningful relative to one. `init_spectra_cal_ref` in `train.py` wires a calibration file into a `SpectraGen` before feature extraction.
+### Calibration (essential — easy to misunderstand)
+Calibration does **not** use a known/reference plastic. It is a **full scan taken with an empty chamber (no sample present)**. There are two distinct noise corrections, and they are different things:
+
+1. **Ambient** — captured *inside every scan automatically*. The firmware reads each LED twice (on, then off); the "off" reading is ambient room/sunlight. `subtract_noise()` removes it per-scan: `intensity − ambient`.
+2. **Calibration (`cal_values`)** — a *separate, manual* empty-chamber scan. Clicking **Calibrate** in the GUI runs `cal = Spectra.subtract_noise(empty_chamber_scan)` (i.e. `intensity − ambient` for the empty chamber) and stores it. This captures **LED scatter** — light bouncing off the housing/optics back to the photodiode without hitting a sample.
+
+A real sample is then `filtered_spectra() = (intensity − ambient) − cal_values`. So calibration is conceptually a "dark + scatter frame," not a material reference. This is why every dataset ships calibration CSVs and why scanning is gated behind calibration in the GUI — the model was trained on scatter-subtracted features and expects the same. In training, `init_spectra_cal_ref` wires the matching calibration file into a `SpectraGen` before feature extraction (a scan's `id<n>` in its filename selects which calibration CSV to use).
+
+Separately, `SpectraGen` has a `ref_values` concept used only by the optional `normalize()` min/max scaling — *that* is where a known reference would go, but it is mostly unused (e.g. `dataset1/info.txt`: "No reference is created so that data is not normalized"). Don't confuse `ref_values` (normalization, optional) with `cal_values` (scatter subtraction, always used).
 
 ### Training pipeline (`train.py`)
 `gen_datasets` walks `data/<dataset>/{train,val}/<label>/*.csv`, runs each scan through `SpectraGen`, and builds X/y arrays. Labels are integer-coded (see the `labels` dict in `app.py`: 0=abs, 1=pla, 2=empty, 3=non_plastic, 4=petg, 5=plastic). It trains a panel of scikit-learn classifiers (GradientBoosting, HistGradientBoosting, MLP, SVC/RBF, KNN, VotingClassifier, etc.). Optionally folds in CV colour features (`add_colour_data`).
