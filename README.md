@@ -80,6 +80,12 @@ Special thanks to 3cycle founder Jason Amri, the Plastic Scanner team, Velocity 
 
 ## Running the Application
 
+### Hardware
+
+The sensor is based on the open-source Plastic Scanner Development Board v2.x. See the full component list and the ADC/LED-driver schematics.
+
+> [Hardware Bill of Materials](ref/plastic-scanner/DB2.x-Hardware-main/BOM.md)
+
 ### Firmware
 
 Flash the custom firmware onto the development board.
