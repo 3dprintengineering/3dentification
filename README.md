@@ -32,6 +32,41 @@ Using a small USB camera, a live video feed captures the colour of the sample by
 
 By collecting samples of known material, scanning them, and labelling that data with the material of the sample, we created a dataset specific to our sensor which we used to train a software model how to classify new, unlabelled samples. By the time the poster was made, the software model could accurately distinguish between PLA and ABS 97% of the time, but by collecting more samples and making our dataset larger, that result reached over 99%. 
 
+## How It Works
+
+The system fuses two independent sensors — an NIR spectrometer and a colour camera — and feeds their combined output to a trained classifier. The diagram below shows the end-to-end workflow, from the physical scan on the sensor board through to the material + colour prediction shown in the GUI.
+
+```mermaid
+flowchart TD
+    subgraph HW["Sensor Board (Arduino firmware)"]
+        LED["8 NIR LEDs<br/>(850–1650 nm)"] -->|reflectance| PD["Photodiode"]
+        PD --> ADC["ADS1256 ADC"]
+        ADC --> SPEC["gen_spectra:<br/>per-LED intensity,<br/>variance, ambient"]
+    end
+
+    SPEC -->|JSON over USB serial| GETSCAN["get_scan()<br/>→ pandas DataFrame"]
+
+    subgraph CAL["Calibration (empty chamber, run once)"]
+        EMPTY["Empty-chamber scan"] --> SCATTER["cal_values<br/>(LED scatter baseline)"]
+    end
+
+    GETSCAN --> SG["SpectraGen"]
+    SCATTER --> SG
+    SG --> FILT["filtered_spectra =<br/>(intensity − ambient) − cal_values"]
+    FILT --> FEAT["Feature vector:<br/>8 spectra + 64 ratios"]
+
+    subgraph CV["Computer Vision"]
+        CAM["USB camera"] --> CROP["Centre 75×75 px crop"]
+        CROP --> RGB["Mean RGB → colour name"]
+    end
+
+    FEAT --> MODEL["scikit-learn classifier<br/>(.pickle)"]
+    RGB --> MODEL
+    MODEL --> PRED["Prediction:<br/>PLA / ABS / PETG / …<br/>+ colour"]
+```
+
+Models are trained offline (`scripts/train.py`) on labelled scans collected with the same `SpectraGen` pipeline, so the live features match what the model saw during training. See [CLAUDE.md](CLAUDE.md) for a deeper architecture walkthrough.
+
 ## Languages and Technologies
 Python, C++, Arduino, PlatformIO, Open-CV, Scikit-Learn
 
